@@ -40,8 +40,8 @@ const said = db.defineDataBase<boolean>("said", false, {
   saveInSeconds: 0,
 });
 
-const messageLib = Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), ["喵"]);
-const messageSearch = Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), ["喵"]);
+const messageLib = [...new Set(Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), ["喵"]))] ;
+const messageSearch = [...new Set(Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), ["喵"]))];
 
 const msgsearch = new fuse(messageSearch);
 
