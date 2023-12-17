@@ -97,6 +97,7 @@ class DB {
 
   defineDataBase<T>(
     dbName: string,
+    defaultValue: T,
     options?: {
       dir?: string;
       saveInSeconds?: number;
@@ -167,8 +168,8 @@ class DB {
         );
         return true;
       },
-      get: function (db, key: string): T {
-        return db[key] as T;
+      get: function (db, key: string) {
+        return db[key] as T ?? defaultValue;
       },
       deleteProperty: function(db, key: string) {
         delete db[key];

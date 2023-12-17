@@ -1,10 +1,9 @@
 import TelegramBot, {
   InlineQueryResultArticle,
-  Message,
 } from "node-telegram-bot-api";
 import DB from "./lib/db.js";
 import fuse, { FuseResult } from "fuse.js";
-import { createHash } from "crypto";
+import crypto from "crypto";
 
 const config = {
   name: "whatdidlincasaybot",
@@ -26,20 +25,25 @@ const bot = new TelegramBot(config.token, {
 
 const db = new DB();
 
-const users = db.defineDataBase<boolean>("joinedUsers", {
+const users = db.defineDataBase<boolean>("joinedUsers", false, {
   saveInSeconds: 0,
   autoDeleteInSecond: 0,
 });
 
-const messages = db.defineDataBase<Message[]>("messages", {
-  autoDeleteInSecond: 86400,
+const messages = db.defineDataBase<string[]>("messages", [], {
+  autoDeleteInSecond: 0,
+  saveInSeconds: 0,
 });
 
-const fuzzyOptions = { keys: ["text"] };
+const said = db.defineDataBase<boolean>("said", false, {
+  autoDeleteInSecond: 0,
+  saveInSeconds: 0,
+});
 
-const messageLib = Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), []);
+const messageLib = Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), ["喵"]);
+const messageSearch = Object.keys(messages).map(id => messages[id]).reduce((a, b) => a.concat(b), ["喵"]);
 
-const msgsearch = new fuse(messageLib, fuzzyOptions);
+const msgsearch = new fuse(messageSearch);
 
 
 bot.on("message", (msg) => {
@@ -49,29 +53,33 @@ bot.on("message", (msg) => {
   if (msg.text.startsWith(`/join@${config.name}`)) {
     bot.sendMessage(msg.chat.id, "加入成功", { reply_to_message_id: msg.message_id });
     users[msg.from?.id] = true;
+    return;
   }
   if (msg.text.startsWith(`/quit@${config.name}`)) {
     bot.sendMessage(msg.chat.id, "退出成功", { reply_to_message_id: msg.message_id });
     users[msg.from?.id] = true;
+    return;
   }
+  if (said[msg.text.trim()]) return;
   if (msg.from?.id && users[msg.from?.id]) {
-    messages[msg.from.id].push(msg);
-    messageLib.push(msg);
-    msgsearch.add(msg);
+    const s = msg.text.trim();
+    said[s] = true;
+    messages[msg.from.id].push(s);
+    messages[msg.from.id] = messages[msg.from.id];
+    messageLib.push(s);
+    msgsearch.add(s);
     console.log("[add record]", msg.text);
   }
 });
 
-const mkres : (x: FuseResult<TelegramBot.Message>[] | typeof messageLib) => InlineQueryResultArticle[] = (x) => x.map(res => {
-  let txt = "";
-  if ("text" in res && res.text) {
-    txt = res.text;
-  } else if ("item" in res && res.item.text) {
-    txt = res.item.text;
+const mkres : (x: FuseResult<string>[] | typeof messageLib) => InlineQueryResultArticle[] = (x) => x.map(res => {
+  let txt = res;
+  if (typeof res !== "string") {
+    txt = res.item;
   }
   return {
     type: "article",
-    id: createHash("md5").update(txt).digest("hex"),
+    id: crypto.randomUUID(),
     title: txt,
     input_message_content: {
       message_text: txt,
@@ -83,12 +91,17 @@ bot.on("inline_query", (query) => {
   console.log("[query from ", query.from.username, "]: ", query.query);
   if (query.query.trim() === "") {
     messageLib.sort(() => Math.random() - 0.5);
-    bot.answerInlineQuery(query.id, mkres(messageLib));
+    console.log(mkres(messageLib));
+    bot.answerInlineQuery(query.id, mkres(messageLib), {
+      cache_time: 5,
+    });
   } else {
     const res = msgsearch.search(query.query);
-    console.log("result:");
-    console.log(res);
-    bot.answerInlineQuery(query.id, mkres(res));
+    console.log("querying ", query.query, "result:");
+    console.log(mkres(res));
+    bot.answerInlineQuery(query.id, mkres(res), {
+      cache_time: 5,
+    });
   }
 });
 
